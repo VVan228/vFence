@@ -4,11 +4,11 @@ plugins {
 
 android {
     namespace 'com.example.vfence'
-    compileSdk 32
+    compileSdk 33
 
     defaultConfig {
         applicationId "com.example.vfence"
-        minSdk 21
+        minSdk 23
         targetSdk 32
         versionCode 1
         versionName "1.0"
@@ -29,6 +29,12 @@ android {
 }
 
 dependencies {
+    implementation files('libs/app-debug.aar')
+    implementation files('libs/data-debug.aar')
+    implementation files('libs/domain-debug.aar')
+
+    implementation 'org.altbeacon:android-beacon-library:2.19.5' // https://altbeacon.github.io/android-beacon-library
+    implementation 'com.lemmingapex.trilateration:trilateration:1.0.2'
 
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.8.0'
