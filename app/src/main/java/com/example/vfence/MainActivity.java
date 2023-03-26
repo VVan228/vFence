@@ -10,13 +10,17 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.view.Display;
-import android.view.MotionEvent;
 import android.view.Surface;
+import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import com.example.vfence.ar.ArCanvas;
+import com.example.vfence.ar.AvgPoint;
+import com.example.vfence.ar.Vector2d;
+import com.example.vfence.ar.Vector3d;
 import com.mrx.indoorservice.api.IndoorService;
 import com.mrx.indoorservice.domain.model.BeaconsEnvironmentInfo;
 import com.mrx.indoorservice.domain.model.Point;
@@ -28,6 +32,8 @@ import org.altbeacon.beacon.Beacon;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -43,14 +49,23 @@ public class MainActivity extends AppCompatActivity {
     SensorManager sensorManager;
     Sensor sensorAccel;
     Sensor sensorMagnet;
-    ImageView line;
-    TextView rotate;
     int rotation;
+
+    DrawView canvas;
+    Vector3d point1 = new Vector3d(1,0.5,-0.3);
+    Vector3d point2 = new Vector3d(1,20,0.3);
+    Vector3d position = new Vector3d(-4,0,0);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+        canvas = new DrawView(this);
+        setContentView(canvas);
+        ArCanvas.getInstance().init(Arrays.asList(point1, point2), Math.PI/2, Math.PI/2);
+
+        canvas.setOnClickListener(view -> {
+
+        });
 
         indoorService = IndoorService.INSTANCE.getInstance(this);
         indoorService.getPosition().setEnvironment(stateEnvironment);
@@ -71,6 +86,8 @@ public class MainActivity extends AppCompatActivity {
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         sensorAccel = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         sensorMagnet = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
+
+
     }
 
     // Функция обратного вызова
@@ -130,17 +147,14 @@ public class MainActivity extends AppCompatActivity {
         TimerTask task = new TimerTask() {
             @Override
             public void run() {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        getDeviceOrientation();
-                        getActualDeviceOrientation();
-                        showInfo();
-                    }
+                runOnUiThread(() -> {
+                    getDeviceOrientation();
+                    getActualDeviceOrientation();
+                    renderCanvas();
                 });
             }
         };
-        timer.schedule(task, 0, 50);
+        timer.schedule(task, 0, 10);
         WindowManager windowManager = ((WindowManager) getSystemService(Context.WINDOW_SERVICE));
         Display display = windowManager.getDefaultDisplay();
         rotation = display.getRotation();
@@ -150,8 +164,29 @@ public class MainActivity extends AppCompatActivity {
         return String.format("%1$.1f\t\t%2$.1f\t\t%3$.1f", values[0], values[1], values[2]);
     }
 
-    void showInfo() {
-        System.out.println("Orientation : " + format(valuesResult)+"\nOrientation 2: " + format(valuesResult2));
+    void renderCanvas() {
+
+        float a1 = valuesResult2[0];
+        float a2 = valuesResult2[1];
+        float a3 = valuesResult2[2];
+
+        /*Vector2d res = ar.getPointCoord(Math.PI/2, Math.PI/2,
+                ar.rotateVector(point, a1, a2, a3));
+        if(res == null){
+            System.out.println("null!");
+            canvas.setX(0f);
+            canvas.setY(0f);
+            canvas.invalidate();
+            return;
+        }
+
+        realPoint.setPoint(res);
+        Vector2d resres = realPoint.getPoint();*/
+        List<AvgPoint> res = ArCanvas.getInstance().updateData(position, a1,a2,a3);
+
+        canvas.setPoints(res);
+        canvas.invalidate();
+        //System.out.println("Orientation : " + format(valuesResult)+"\nOrientation 2: " + format(valuesResult2));
     }
 
     float[] r = new float[9];
@@ -193,7 +228,6 @@ public class MainActivity extends AppCompatActivity {
         //valuesResult2[0] = (float) Math.toDegrees(valuesResult2[0]);
         //valuesResult2[1] = (float) Math.toDegrees(valuesResult2[1]);
         //valuesResult2[2] = (float) Math.toDegrees(valuesResult2[2]);
-        return;
     }
 
     float[] valuesAccel = new float[3];
