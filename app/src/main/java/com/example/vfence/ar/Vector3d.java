@@ -36,6 +36,10 @@ public class Vector3d {
         return new Vector3d(x-vector.getX(), y-vector.getY(), z-vector.getZ());
     }
 
+    public Vector3d addVector(Vector3d vector) {
+        return new Vector3d(x+vector.getX(), y+vector.getY(), z+vector.getZ());
+    }
+
     public Vector3d(double x, double y, double z) {
         this.x = x;
         this.y = y;
@@ -64,6 +68,10 @@ public class Vector3d {
 
     public void setZ(double z) {
         this.z = z;
+    }
+
+    public double getDistance(){
+        return Math.sqrt(x*x + y*y + z*z);
     }
 
     @Override

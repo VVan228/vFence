@@ -1,11 +1,12 @@
 package com.example.vfence.ar;
 
 public class AvgPoint {
-    private final int MOVING_AVERAGE_SIZE = 20;
+    private int MOVING_AVERAGE_SIZE = 20;
 
     Vector2d[] pointsArray = new Vector2d[MOVING_AVERAGE_SIZE];
     int pointsArrayLen = 0;
     boolean visible = false;
+    double distance;
 
     public boolean isVisible(){
         return visible;
@@ -44,5 +45,13 @@ public class AvgPoint {
         avgX /= (float)pointsArray.length;
         avgY /= (float)pointsArray.length;
         return new Vector2d(avgX, avgY, Axis.Z);
+    }
+
+    public double getDistance(){
+        return distance;
+    }
+
+    public void setDistance(double d){
+        distance = d;
     }
 }

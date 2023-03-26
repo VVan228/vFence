@@ -25,7 +25,6 @@ import android.os.Bundle;
 import android.util.Size;
 import android.view.Display;
 import android.view.Surface;
-import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.ImageView;
@@ -44,12 +43,15 @@ import com.mrx.indoorservice.domain.model.PositionInfo;
 import com.mrx.indoorservice.domain.model.StateEnvironment;
 
 import org.altbeacon.beacon.Beacon;
+import org.altbeacon.beacon.BeaconManager;
+import org.altbeacon.beacon.service.RunningAverageRssiFilter;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ExecutionException;
@@ -68,11 +70,17 @@ public class MainActivity extends AppCompatActivity {
     Sensor sensorMagnet;
     int rotation;
 
-    DrawView canvas;
     private List<AvgPoint> points;
-    Vector3d point1 = new Vector3d(1,0.5,-0.3);
-    Vector3d point2 = new Vector3d(1,20,0.3);
-    Vector3d position = new Vector3d(-4,0,0);
+    Vector3d point1 = new Vector3d(0,0,1);
+    Vector3d point2 = new Vector3d(1,0,0);
+    Vector3d point3 = new Vector3d(1,0,-0.1);
+    Vector2d position = new Vector2d(0, 0, Vector2d.getZaxis());
+    double a1;
+    double a2;
+    double a3;
+
+    double distance = 1d;
+
 
 
     //camera
@@ -84,16 +92,16 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        canvas = new DrawView(this);
         //setContentView(canvas);
         setContentView(R.layout.activity_main);
-        ArCanvas.getInstance().init(Arrays.asList(point1, point2), Math.PI/2, Math.PI/2);
-
-//        canvas.setOnClickListener(view -> {
-//        });
+        ArCanvas.getInstance().init(
+                Arrays.asList(point1, point2, point3),
+                Math.PI/4,Math.PI/4);
 
 
         indoorService = IndoorService.INSTANCE.getInstance(this);
+        BeaconManager.setRssiFilterImplClass(RunningAverageRssiFilter.class);
+        RunningAverageRssiFilter.setSampleExpirationMilliseconds(50L);
         indoorService.getPosition().setEnvironment(stateEnvironment);
 
         /*buttonStart = findViewById(R.id.btn_control);
@@ -104,18 +112,37 @@ public class MainActivity extends AppCompatActivity {
         indoorService.getBeaconsEnvironment().getRangingViewModel().observe(this, observerForIndoorServiceBeacons);
         indoorService.getAzimuthManager().getAzimuthViewModel().observe(this, observerForIndoorServiceAzimuth);
 
-        /*buttonStart.setOnClickListener(it -> {
-            indoorService.getBeaconsEnvironment().startRanging();
-            indoorService.getAzimuthManager().startListen();
-        });*/
+        indoorService.getBeaconsEnvironment().startRanging();
+        indoorService.getAzimuthManager().startListen();
 
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         sensorAccel = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         sensorMagnet = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
 
+        Button btnUp = findViewById(R.id.button_up);
+        Button btnDwn = findViewById(R.id.button_down);
+        Button btnLft = findViewById(R.id.button_left);
+        Button btnRht = findViewById(R.id.button_right);
+        position = new Vector2d(0,0, Vector2d.getZaxis());
+        btnUp.setOnClickListener(view->{
+            position.setX(position.getX()+0.25);
+        });
+        btnDwn.setOnClickListener(view->{
+            position.setX(position.getX()-0.25);
+        });
+        btnLft.setOnClickListener(view->{
+            position.setY(position.getY()-0.25);
+        });
+        btnRht.setOnClickListener(view->{
+            position.setY(position.getY()+0.25);
+        });
 
         //camera
         preview = findViewById(R.id.viewFinder);
+        preview.setOnClickListener(view->{
+            ArCanvas ar = ArCanvas.getInstance();
+            ar.addPoint(ar.createNewPoint(position.getVector3d(), this.a1, this.a2, this.a3, distance));
+        });
         if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA)
                 != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, new String[] {Manifest.permission.CAMERA},
@@ -136,50 +163,48 @@ public class MainActivity extends AppCompatActivity {
 
     private void initializeCamera() {
         cameraProviderFuture = ProcessCameraProvider.getInstance(this);
-        cameraProviderFuture.addListener(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
+        cameraProviderFuture.addListener(() -> {
+            try {
+                ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
 
-                    //Preview preview = new Preview.Builder().build();
+                //Preview preview = new Preview.Builder().build();
 
-                    //ImageCapture imageCapture = new ImageCapture.Builder().build();
+                //ImageCapture imageCapture = new ImageCapture.Builder().build();
 
-                    ImageAnalysis imageAnalysis = new ImageAnalysis.Builder()
-                            .setTargetResolution(new Size(1024, 768))
-                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                            .build();
+                ImageAnalysis imageAnalysis = new ImageAnalysis.Builder()
+                        .setTargetResolution(new Size(1024, 768))
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .build();
 
-                    CameraSelector cameraSelector = new CameraSelector.Builder()
-                            .requireLensFacing(CameraSelector.LENS_FACING_BACK)
-                            .build();
+                CameraSelector cameraSelector = new CameraSelector.Builder()
+                        .requireLensFacing(CameraSelector.LENS_FACING_BACK)
+                        .build();
 
-                    imageAnalysis.setAnalyzer(ContextCompat.getMainExecutor(MainActivity.this),
-                            image -> {
-                                Image img = image.getImage();
-                                Bitmap bitmap = translator.translateYUV(img, MainActivity.this);
+                imageAnalysis.setAnalyzer(ContextCompat.getMainExecutor(MainActivity.this),
+                        image -> {
+                            Image img = image.getImage();
+                            Bitmap bitmap = translator.translateYUV(img, MainActivity.this);
 
-                                int size = bitmap.getWidth() * bitmap.getHeight();
-                                int[] pixels = new int[size];
-                                bitmap.getPixels(pixels, 0, bitmap.getWidth(), 0, 0,
-                                        bitmap.getWidth(), bitmap.getHeight());
+                            int size = bitmap.getWidth() * bitmap.getHeight();
+                            int[] pixels = new int[size];
+                            bitmap.getPixels(pixels, 0, bitmap.getWidth(), 0, 0,
+                                    bitmap.getWidth(), bitmap.getHeight());
 
-                                for (int i = 0; i < size; i++) {
-                                    int color = pixels[i];
-                                    int r = color >> 16 & 0xff;
-                                    int g = color >> 8 & 0xff;
-                                    int b = color & 0xff;
-                                    int gray = (r + g + b) / 3;
-                                    pixels[i] = 0xff000000 | gray << 16 | gray << 8 | gray;
-                                }
-                                bitmap.setPixels(pixels, 0, bitmap.getWidth(), 0, 0,
-                                        bitmap.getWidth(), bitmap.getHeight());
+                            for (int i = 0; i < size; i++) {
+                                int color = pixels[i];
+                                int r = color >> 16 & 0xff;
+                                int g = color >> 8 & 0xff;
+                                int b = color & 0xff;
+                                int gray = (r + g + b) / 3;
+                                pixels[i] = 0xff000000 | gray << 16 | gray << 8 | gray;
+                            }
+                            bitmap.setPixels(pixels, 0, bitmap.getWidth(), 0, 0,
+                                    bitmap.getWidth(), bitmap.getHeight());
 
-                                preview.setRotation(image.getImageInfo().getRotationDegrees());
-                                preview.setImageBitmap(bitmap);
+                            preview.setRotation(image.getImageInfo().getRotationDegrees());
+                            preview.setImageBitmap(bitmap);
 
-                                Canvas canvas = new Canvas(bitmap);
+                            Canvas canvas = new Canvas(bitmap);
 //                                canvas.drawColor(Color.TRANSPARENT);
 //                                Paint paint = new Paint();
 //                                paint.setColor(Color.GREEN); // установим белый цвет
@@ -188,33 +213,31 @@ public class MainActivity extends AppCompatActivity {
 //                                paint.setAntiAlias(true);
 //
 //                                canvas.drawLine(0,0, bitmap.getWidth(), bitmap.getHeight(), paint);
-                                drawCircle(canvas);
-                                image.close();
-                            });
+                            drawCircle(canvas);
+                            image.close();
+                        });
 
-                    cameraProvider.bindToLifecycle(MainActivity.this, cameraSelector, imageAnalysis);
+                cameraProvider.bindToLifecycle(MainActivity.this, cameraSelector, imageAnalysis);
 
-                } catch (ExecutionException e) {
-                    e.printStackTrace();
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
+            } catch (ExecutionException | InterruptedException e) {
+                e.printStackTrace();
             }
         }, ContextCompat.getMainExecutor(this));
     }
     public void drawCircle(Canvas canvas){
         canvas.drawColor(Color.TRANSPARENT);
         Paint paint = new Paint();
-        paint.setColor(Color.GREEN); // установим белый цвет
-        paint.setStrokeWidth(5);
+        paint.setColor(Color.rgb(209, 64,143)); // установим белый цвет
         paint.setStyle(Paint.Style.FILL); // заливаем
         paint.setAntiAlias(true);
 
         for(AvgPoint p: points){
             if(p.isVisible()){
+                float size = (float) (15d/(p.getDistance()));
+                paint.setStrokeWidth(size);
                 canvas.drawCircle((float) (canvas.getWidth()*p.getPoint().getX()),
                         (float) (canvas.getHeight()*p.getPoint().getY()),
-                        20, paint);
+                        size, paint);
             }
         }
 
@@ -226,34 +249,32 @@ public class MainActivity extends AppCompatActivity {
     };
 
     Observer<Collection<BeaconsEnvironmentInfo>> observerForIndoorServiceBeacons = beacons -> {
-        String temp = "Ranged: " + beacons.size() + " beacons\n";
-        for (BeaconsEnvironmentInfo beacon : beacons) {
-            temp += beacon.getBeaconId() + " -> " + beacon.getDistance() + "\n";
-        }
-        //textViewBeacons.setText(temp);
-
         // Определение позиции далее
-        if (beacons.size() > 2) {
+        if (beacons.size() >= 2) {
             try {
                 PositionInfo position = indoorService.getPosition().getPosition(indoorService.getMapper().fromBeaconsEnvironmentInfoToEnvironmentInfo(beacons));
-                //textViewPosition.setText("Position: (" + position.getPosition().getX() + ", " + position.getPosition().getY() + ")");
+                //textViewPosition.setText();
 
+                //this.position.setPoint(new Vector2d(position.getPosition().getX(), position.getPosition().getY(), Vector2d.getZaxis()));
+                System.out.println(this.position);
             } catch (IllegalArgumentException e){
-                //System.out.println(e.getMessage());
+                System.out.println(e.getMessage());
             }
-                    }
+        }
 
     };
 
     Observer<Float> observerForIndoorServiceAzimuth = azimuth -> {
-        textViewAzimuth.setText(Float.toString(azimuth));
+        //textViewAzimuth.setText(Float.toString(azimuth));
+        //this.a1 = azimuth*Math.PI/180;
+//        System.out.println(azimuth);
     };
 
-    ArrayList stateEnvironment = new ArrayList(Arrays.asList(
-            new StateEnvironment("DF:6A:59:AE:F9:CC", new Point<>(0.0, 0.0)),
-            new StateEnvironment("D3:81:75:66:79:B8", new Point<>(10.0, 0.0)),
-            new StateEnvironment("E4:C1:3F:EF:49:D7", new Point<>(10.0, 10.0)),
-            new StateEnvironment("E6:96:DA:5C:82:59", new Point<>(0.0, 10.0))
+    ArrayList<StateEnvironment> stateEnvironment = new ArrayList<>(Arrays.asList(
+            new StateEnvironment("CF:CA:06:0F:D0:F9", new Point<>(0.0, 50.0)),
+            new StateEnvironment("D3:81:75:66:79:B8", new Point<>(0.0, 0.0)),
+            new StateEnvironment("E4:C1:3F:EF:49:D7", new Point<>(50.0, 0.0)),
+            new StateEnvironment("E6:96:DA:5C:82:59", new Point<>(50.0, 50.0))
     ));
 
     @Override
@@ -290,15 +311,12 @@ public class MainActivity extends AppCompatActivity {
         rotation = display.getRotation();
 
     }
-    String format(float values[]) {
-        return String.format("%1$.1f\t\t%2$.1f\t\t%3$.1f", values[0], values[1], values[2]);
-    }
 
     void renderCanvas() {
 
-        float a1 = valuesResult2[0];
-        float a2 = valuesResult2[1];
-        float a3 = valuesResult2[2];
+        this.a1 = valuesResult2[0];
+        this.a2 = valuesResult2[2];
+        this.a3 = valuesResult2[1];
 
         /*Vector2d res = ar.getPointCoord(Math.PI/2, Math.PI/2,
                 ar.rotateVector(point, a1, a2, a3));
@@ -312,11 +330,10 @@ public class MainActivity extends AppCompatActivity {
 
         realPoint.setPoint(res);
         Vector2d resres = realPoint.getPoint();*/
-        List<AvgPoint> res = ArCanvas.getInstance().updateData(position, a1,a2,a3);
 
 //        canvas.setPoints(res);
 //        canvas.invalidate();
-        points = res;
+        points = ArCanvas.getInstance().updateData(position.getVector3d(), this.a1, this.a2, this.a3);
         //System.out.println("Orientation : " + format(valuesResult)+"\nOrientation 2: " + format(valuesResult2));
     }
 
@@ -324,11 +341,7 @@ public class MainActivity extends AppCompatActivity {
 
     void getDeviceOrientation() {
         SensorManager.getRotationMatrix(r, null, valuesAccel, valuesMagnet);
-        SensorManager.getOrientation(r, valuesResult);
-
-        //valuesResult[0] = (float) Math.toDegrees(valuesResult[0]);
-        //valuesResult[1] = (float) Math.toDegrees(valuesResult[1]);
-        //valuesResult[2] = (float) Math.toDegrees(valuesResult[2]);
+        SensorManager.getOrientation(r, valuesResult2);
         return;
     }
 
@@ -356,14 +369,10 @@ public class MainActivity extends AppCompatActivity {
         }
         SensorManager.remapCoordinateSystem(inR, x_axis, y_axis, outR);
         SensorManager.getOrientation(outR, valuesResult2);
-        //valuesResult2[0] = (float) Math.toDegrees(valuesResult2[0]);
-        //valuesResult2[1] = (float) Math.toDegrees(valuesResult2[1]);
-        //valuesResult2[2] = (float) Math.toDegrees(valuesResult2[2]);
     }
 
     float[] valuesAccel = new float[3];
     float[] valuesMagnet = new float[3];
-    float[] valuesResult = new float[3];
     float[] valuesResult2 = new float[3];
 
 

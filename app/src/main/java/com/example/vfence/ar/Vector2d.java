@@ -46,6 +46,10 @@ public class Vector2d {
         this.axis = axis;
     }
 
+    public Vector3d getVector3d(){
+        return new Vector3d(a, b, 0);
+    }
+
     public double getX(){
         switch (axis){
             case Z:
@@ -104,6 +108,10 @@ public class Vector2d {
                 "a=" + a +
                 ", b=" + b +
                 '}';
+    }
+
+    public static Axis getZaxis(){
+        return Axis.Z;
     }
 }
 
